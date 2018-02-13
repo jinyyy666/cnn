@@ -1,14 +1,13 @@
-function [opttheta] = minFuncSGD(funObj,theta,data,labels,...
+function [opttheta] = minFuncADAM(funObj,theta,data,labels,...
                         options)
-% Runs stochastic gradient descent with momentum to optimize the
-% parameters for the given objective.
+% Runs Adam to optimize the parameters for the given objective.
 %
 % Parameters:
 %  funObj     -  function handle which accepts as input theta,
 %                data, labels and returns cost and gradient w.r.t
 %                to theta.
 %  theta      -  unrolled parameter vector
-%  data       -  stores data in m x n x numExamples tensor
+%  data       -  stores data in m x n x endTime x numExamples tensor
 %  labels     -  corresponding labels in numExamples x 1 vector
 %  options    -  struct to store specific options for optimization
 %
@@ -17,29 +16,42 @@ function [opttheta] = minFuncSGD(funObj,theta,data,labels,...
 %
 % Options (* required)
 %  epochs*     - number of epochs through data
-%  alpha*      - initial learning rate
 %  minibatch*  - size of minibatch
-%  momentum    - momentum constant, defualts to 0.9
-
-
+%  alpha      - initial learning rate, default to be 0.001
+%  b1     - beta1, controls the decay of first moment, default to be 0.9
+%  b2     - beta2, controls the decay of second moment, default to be 0.999
+%  eps    - parameter for making update robust, default to be 1e-8
 %%======================================================================
 %% Setup
-assert(all(isfield(options,{'epochs','alpha','minibatch'})),...
-        'Some options not defined');
-if ~isfield(options,'momentum')
-    options.momentum = 0.9;
+assert(all(isfield(options,{'epochs','minibatch'})),...
+        'Need to define both `epochs` and `minibatch`');
+if ~isfield(options, 'alpha')
+    options.alpha = 0.001;
+end
+if ~isfield(options,'b1')
+    options.b1 = 0.9;
 end;
+if ~isfield(options, 'b2')
+    options.b2 = 0.999;
+end
+if ~isfield(options, 'eps')
+    options.eps = 1e-8;
+end
 epochs = options.epochs;
 alpha = options.alpha;
 minibatch = options.minibatch;
+b1 = options.b1;
+b2 = options.b2;
+eps = options.eps;
+b1_t = b1;
+b2_t = b2;
 m = length(labels); % training set size
 % Setup for momentum
-mom = options.momentum;
-momIncrease = 20;
-velocity = zeros(size(theta));
 
+g1 = zeros(size(theta));
+g2 = zeros(size(theta));
 %%======================================================================
-%% SGD loop
+%% Adam loop
 it = 0;
 for e = 1:epochs
     
@@ -49,11 +61,6 @@ for e = 1:epochs
     for s=1:minibatch:(m-minibatch+1)
         it = it + 1;
 
-        % increase momentum after momIncrease iterations
-        if it == momIncrease
-            mom = options.momentum;
-        end;
-
         % get next randomly selected minibatch
         mb_data = data(:,:,:,rp(s:s+minibatch-1));
         mb_labels = labels(rp(s:s+minibatch-1));
@@ -61,20 +68,18 @@ for e = 1:epochs
         % evaluate the objective function on the next minibatch
         [cost, grad] = funObj(theta,mb_data,mb_labels);
         
-        % Instructions: Add in the weighted velocity vector to the
-        % gradient evaluated above scaled by the learning rate.
-        % Then update the current weights theta according to the
-        % sgd update rule
-        
-        %%% YOUR CODE HERE %%%
-        velocity = mom * velocity + alpha * grad;
-        theta = theta - velocity;
+        % Estimate the first and second moment here:
+        g1 = b1 * g1 + (1 - b1) * grad;
+        g2 = b2 * g2 + (1 - b2) * grad .* grad;
+        theta = theta - alpha * (g1/(1 - b1_t)) ./ (sqrt(g2/ (1 - b2_t)) + eps);
+        b1_t = b1_t * b1;
+        b2_t = b2_t * b2;
         
         fprintf('Epoch %d: Cost on iteration %d is %f\n',e,it,cost);
     end;
 
-    % aneal learning rate by factor of two after each epoch
-    alpha = alpha/2.0;
+    % aneal learning rate by the sqrt
+    alpha = alpha/sqrt(it+1);
 
 end;
 

@@ -6,6 +6,15 @@
 %% STEP 0: Initialize Parameters and Load Data
 %  complete the config.m to config the network structure;
 cnnConfig = config();
+
+% set up the paths
+addpath('../');
+addpath('../layer');
+addpath('../TrainingMethod');
+addpath('../Testing');
+addpath('../DebugTools');
+addpath('../Dataset/MNIST');
+
 %  calling cnnInitParams() to initialize parameters
 [theta meta] = cnnInitParams(cnnConfig);
 

@@ -1,5 +1,5 @@
-function newTheta = thetaChange(oldTheta, meta, type, cnnConfig)
-%thetaChange change theta from the old form to the new form based on type
+function newTheta = thetaChangeSpiking(oldTheta, meta, type, cnnConfig)
+%thetaChangeSpiking change theta from the old form to the new form based on type
 % type  - change type
 %       'stack2vec'
 %       'vec2stack'
@@ -30,8 +30,8 @@ switch type
                     newTheta{i}.b = [];
                     row = tempLayer.dimension(1);
                     col = tempLayer.dimension(2);
-                    channel = tempLayer.dimension(3);
-                case 'conv'
+                    channel = tempLayer.dimension(4);
+                case 'convspiking'
                     row = row + 1 - tempLayer.filterDim(1);
                     col = col + 1 - tempLayer.filterDim(2);          
                     newTheta{i}.W = reshape(oldTheta(1:meta.numParams(i,1)),meta.paramsize{i});
@@ -39,20 +39,18 @@ switch type
                     channel = tempLayer.numFilters;
                     newTheta{i}.b = oldTheta(1:channel);
                     oldTheta(1:channel) = [];
-                case 'pool'
+                case 'poolspiking'
                     newTheta{i}.W = [];
                     newTheta{i}.b = [];
                     row = int32(row/tempLayer.poolDim(1));
                     col = int32(col/tempLayer.poolDim(2));
-                case 'stack2line'
+                case 'stack2linespiking'
                     newTheta{i}.W = [];
                     newTheta{i}.b = [];
                     row = row * col * channel;
                     col = 1;
                     channel = 1;
-                    %dimension = row;
-                case {'sigmoid','tanh','relu','softmax','softsign'}
-                    % initialisation of dnn method
+                case 'spiking'
                     newTheta{i}.W = reshape(oldTheta(1:meta.numParams(i,1)),meta.paramsize{i});
                     oldTheta(1:meta.numParams(i,1)) = [];
                     dimension = tempLayer.dimension;

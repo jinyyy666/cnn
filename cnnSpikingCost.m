@@ -1,19 +1,16 @@
-function [cost, grad, preds] = cnnCost(theta, images, labels,cnnConfig, meta, pred)
-% Calcualte cost and gradient for a single layer convolutional
-% neural network followed by a softmax layer with cross entropy
-% objective.
+function [cost, grad, preds] = cnnSpikingCost(theta, images, labels, cnnConfig, meta, pred)
+% Calcualte cost and gradient for a spiking CNN
 %                            
 % Parameters:
 %  theta      -  a vector parameter
-%  images     -  stores images in imageDim x imageDim x channel x numImges
+%  images     -  stores images in imageDim x imageDim x endTime x channel x numImges
 %                array    
-%  labels     -  for softmax output layer and cross entropy cost function,
-%  the labels are the class numbers.
+%  labels     -  the labels for the output layer
 %  pred       -  boolean only forward propagate and return
 %                predictions
 %
 % Returns:
-%  cost       -  cross entropy cost
+%  cost       -  cross entropy/mse cost
 %  grad       -  gradient with respect to theta (if pred==False)
 %  preds      -  list of predictions for each example (if pred==True)
 
@@ -23,11 +20,11 @@ end;
 
 
 
-theta = thetaChange(theta,meta,'vec2stack',cnnConfig);
+theta = thetaChangeSpiking(theta,meta,'vec2stack',cnnConfig);
 %%======================================================================
 %% STEP 1a: Forward Propagation
 numLayers = size(theta, 1);
-numImages = size(images,4);
+numImages = size(images,5);
 layersizes = meta.layersize;
 
 
@@ -35,31 +32,37 @@ layersizes = meta.layersize;
 temp = cell(numLayers, 1);
 grad = cell(numLayers, 1);
 temp{1}.after = images;
-assert(isequal(size(images),[layersizes{1} numImages]),'layersize do not match at layer 1');
+%assert(isequal(size(images),[layersizes{1} numImages]),'layersize do not match at the input layer');
 
 for l = 2 : numLayers
     tempLayer = cnnConfig.layer{l};
     tempTheta = theta{l};
     switch tempLayer.type
-        case 'conv'
-            [temp{l}.after, temp{l}.linTrans] = cnnConvolve(temp{l-1}.after, tempTheta.W, tempTheta.b, tempLayer.nonLinearType, tempLayer.conMatrix);         
-        case 'pool'
-            [temp{l}.after, temp{l}.weights] = cnnPool(tempLayer.poolDim, temp{l-1}.after, tempLayer.poolType);
-        case 'stack2line'
-            temp{l}.after = reshape(temp{l-1}.after, [], numImages);
-        case {'sigmoid','tanh','relu','softmax'}
-            temp{l}.after = nonlinear(temp{l-1}.after, tempTheta.W, tempTheta.b, tempLayer.type);
-        case 'softsign'
-            [temp{l}.after, temp{l}.linTrans] = nonlinear(temp{l-1}.after, tempTheta.W, tempTheta.b, tempLayer.type);
+        case 'convspiking'
+            [temp{l}.after] = cnnConvSpiking(temp{l-1}.after, tempTheta.W, [], tempLayer.vth);
+        case 'poolspiking'
+            [temp{l}.after, temp{l}.weights] = cnnPoolSpiking(tempLayer.poolDim, temp{l-1}.after, tempLayer.vth);
+        case 'stack2linespiking'
+            temp{l}.after = stack2lineSpiking(temp{l-1}.after);
+        case 'spiking'
+            if strcmp(tempLayer.name, 'output')
+                temp{l}.after = Spiking(temp{l-1}.after, tempTheta.W, [], tempLayer.vth, tempLayer.W_lat);
+            else
+                temp{l}.after = Spiking(temp{l-1}.after, tempTheta.W, [], tempLayer.vth);
+            end
     end
-    assert(isequal(size(temp{l}.after),[layersizes{l} numImages]),'layersize do not match at layer %d\n',l);
+    %assert(isequal(size(temp{l}.after),[layersizes{l} numImages]),'layersize do not match at layer %d\n',l);
+end
+
+if cnnConfig.dump
+    dumpResults(cnnConfig, pred, temp, theta, numLayers);
 end
 
 %%======================================================================
 %% STEP 1b: Calculate Cost
 % Makes predictions given probs and returns without backproagating errors.
 if pred
-    [~,preds] = max(temp{numLayers}.after,[],1);
+    [~,preds] = max(sum(temp{numLayers}.after, 2),[],1);
     preds = preds';
     cost = 0;
     grad = 0;
@@ -74,17 +77,31 @@ switch cnnConfig.costFun
         cost = - mean(sum(extLabels .* log(temp{numLayers}.after)));
     case 'mse'
         numClasses = cnnConfig.layer{numLayers}.dimension;
-        extLabels = zeros(numClasses, numImages);
-        extLabels(sub2ind(size(extLabels), labels', 1 : numImages)) = 1;
-        
+        desired_level = cnnConfig.desired_level;
+        undesired_level = cnnConfig.undesired_level;
+        margin = cnnConfig.margin;
+        extLabels = undesired_level * ones(numClasses, numImages);
+        extLabels(sub2ind(size(extLabels), labels', 1 : numImages)) = desired_level;
+        diff = sum(temp{numLayers}.after, 2) - extLabels;
+        diff(abs(diff) <= margin) = 0;
+        cost = sum(sum(diff.*diff));
 end
 
 %%======================================================================
 %% STEP 1c: Backpropagation
+%  modify the output spikes of the desired neurons if neccessary
+
 if strcmp(cnnConfig.costFun, 'crossEntropy') && strcmp(tempLayer.type, 'softmax')
     temp{l}.gradBefore = temp{l}.after - extLabels;
     grad{l}.W = temp{l}.gradBefore * temp{l - 1}.after' / numImages;
     grad{l}.b = mean(temp{l}.gradBefore, 2);
+elseif strcmp(cnnConfig.costFun, 'mse') && strcmp(tempLayer.name, 'output')
+    temp{l}.lateral_factors = getLateralFactors(temp{l}.after,tempLayer, labels);
+    temp{l}.after = modifyOutputSpikes(temp{l}.after, labels, cnnConfig.desired_level);
+    temp{l}.gradBefore = diff;
+    [temp{l}.accEffect, temp{l}.effectRatio] = synapticEffect(temp{l}.after, temp{l-1}.after, cnnConfig.use_effect_ratio);
+    grad{l}.W = getGradW(temp{l}.accEffect, temp{l}.gradBefore, temp{l}.lateral_factors);
+    grad{l}.b = zeros(size(temp{l}.gradBefore, 1), 1);
 end
 assert(isequal(size(grad{l}.W),size(theta{l}.W)),'size of layer %d .W do not match',l);
 assert(isequal(size(grad{l}.b),size(theta{l}.b)),'size of layer %d .b do not match',l);
@@ -92,28 +109,16 @@ assert(isequal(size(grad{l}.b),size(theta{l}.b)),'size of layer %d .b do not mat
 for l = numLayers-1 : -1 : 2
     tempLayer = cnnConfig.layer{l};
     switch tempLayer.type
-        case 'sigmoid'
-            temp{l}.gradBefore = theta{l + 1}.W' * temp{l + 1}.gradBefore .* temp{l}.after .* (1 - temp{l}.after); 
-            grad{l}.W = temp{l}.gradBefore * temp{l - 1}.after' / numImages;
-            grad{l}.b = mean(temp{l}.gradBefore, 2);
-            
-        case 'relu'
-            temp{l}.gradBefore = theta{l + 1}.W' * temp{l + 1}.gradBefore .* (temp{l}.after > 0);
-            grad{l}.W = temp{l}.gradBefore * temp{l - 1}.after' / numImages;
-            grad{l}.b = mean(temp{l}.gradBefore, 2);
-        
-        case 'tanh'
-            temp{l}.gradBefore = theta{l + 1}.W' * temp{l + 1}.gradBefore .* (1 - temp{l}.after .^ 2);
-            grad{l}.W = temp{l}.gradBefore * temp{l - 1}.after' / numImages;
-            grad{l}.b = mean(temp{l}.gradBefore, 2);
-            
-        case 'softsign'
-            temp{l}.gradBefore = theta{l + 1}.W' * temp{l + 1}.gradBefore ./ ((1 + abs(temp{l}.linTrans)) .^ 2);
-            grad{l}.W = temp{l}.gradBefore * temp{l - 1}.after' / numImages;
-            grad{l}.b = mean(temp{l}.gradBefore, 2);
-            
-        case 'stack2line'
-            temp{l}.gradBefore = reshape(theta{l + 1}.W' * temp{l + 1}.gradBefore, size(temp{l - 1}.after));
+        case 'spiking'
+            temp{l}.gradBefore = (theta{l + 1}.W .* temp{l+1}.effectRatio)' * temp{l + 1}.gradBefore;
+            [temp{l}.accEffect, temp{l}.effectRatio] = synapticEffect(temp{l}.after, temp{l-1}.after, cnnConfig.use_effect_ratio);
+            grad{l}.W = getGradW(temp{l}.accEffect, temp{l}.gradBefore);
+            grad{l}.b = zeros(size(temp{l}.gradBefore, 1), 1);
+        case 'stack2linespiking'
+            size_pool = size(temp{l - 1}.after);
+            size_pool = [size_pool([1,2,4]), numImages];
+            temp{l}.gradBefore = reshape((theta{l + 1}.W .* temp{l+1}.effectRatio)' * temp{l + 1}.gradBefore, size_pool);
+            temp{l}.gradBefore = permute(temp{l}.gradBefore, [2,1,3,4]);
             grad{l}.W = [];
             grad{l}.b = [];
             break;
@@ -125,14 +130,16 @@ end
 for l = l - 1 : -1 : 2
     tempLayer = cnnConfig.layer{l};
     switch tempLayer.type 
-        case 'pool'
-            numChannel = size(temp{l}.after,3);
-            temp{l}.gradAfter = zeros(size(temp{l}.after));
+        case 'poolspiking'
+            size_pool = size(temp{l}.after);
+            size_pool = [size_pool([1,2,4]), numImages];
+            numChannel = size(temp{l}.after,4);
+            temp{l}.gradAfter = zeros(size_pool);
             if isempty(theta{l + 1}.W)
-                % the upper layer is 'stack2line'
+                % the upper layer is 'stack2linespiking'
                 temp{l}.gradAfter = temp{l + 1}.gradBefore;
             else
-                % the upper layer is 'conv'
+                % the upper layer is 'convspiking'
                 for i = 1 : numImages
                     for c = 1 : numChannel
                         for j = 1 : size(temp{l + 1}.gradBefore, 3)
@@ -143,12 +150,9 @@ for l = l - 1 : -1 : 2
                     end
                 end
             end
-            
-            % Todo
-            % If there are cropped borders, situations may be more
-            % complicated.
-            
-            temp{l}.gradBefore = zeros(size(temp{l - 1}.after));
+            size_conv = size(temp{l - 1}.after);
+            size_conv = [size_conv([1,2,4]),numImages];
+            temp{l}.gradBefore = zeros(size_conv);
             for i = 1 : numImages
                 for c = 1 : numChannel
                     temp{l}.gradBefore(:,:,c,i) = kron(temp{l}.gradAfter(:,:,c,i), ones(tempLayer.poolDim)) .* temp{l}.weights(:,:,c,i);
@@ -156,17 +160,8 @@ for l = l - 1 : -1 : 2
             end
             grad{l}.W = [];
             grad{l}.b = [];
-        case 'conv'
-            switch tempLayer.nonLinearType
-                case 'sigmoid'
-                    temp{l}.gradBefore = temp{l + 1}.gradBefore .* temp{l}.after .* (1 - temp{l}.after);
-                case 'tanh'
-                    temp{l}.gradBefore = temp{l + 1}.gradBefore .* (1 - temp{l}.after .^ 2);
-                case 'softsign'
-                    temp{l}.gradBefore = temp{l + 1}.gradBefore ./ ((1 + abs(temp{l}.linTrans)) .^ 2);
-                case 'relu'
-                    temp{l}.gradBefore = temp{l + 1}.gradBefore .* (temp{l}.after > 0);
-            end
+        case 'convspiking'
+            temp{l}.gradBefore = temp{l+1}.gradBefore;
             tempW = zeros([size(theta{l}.W) numImages]); 
             numInputMap = size(tempW, 3);
             numOutputMap = size(tempW, 4);
@@ -174,14 +169,16 @@ for l = l - 1 : -1 : 2
                 for nI = 1 : numInputMap
                     for nO = 1 : numOutputMap
                         if tempLayer.conMatrix(nI,nO) ~= 0
-                            tempW(:,:,nI,nO,i) = conv2(temp{l - 1}.after(:,:,nI,i), rot90(temp{l}.gradBefore(:,:,nO,i), 2), 'valid');
+                            tempW(:,:,nI,nO,i) = getGradWConv(temp{l}.after(:,:,:,nO,i), temp{l - 1}.after(:,:,:,nI,i), temp{l}.gradBefore(:,:,nO,i), size(theta{l}.W, 1), nI, nO);
                         end
                     end
                 end
             end
             grad{l}.W = mean(tempW,5);
-            tempb = mean(sum(sum(temp{l}.gradBefore)),4); 
-            grad{l}.b = tempb(:);
+%             if numInputMap >= 3 && numOutputMap >= 3
+%                 fprintf('Wgrad: %f\n', grad{l}.W(1,3,3,1));
+%             end
+            grad{l}.b = zeros(numOutputMap,1);
                              
         otherwise 
             printf('%s layer is not supported', tempLayer.type);       
