@@ -98,9 +98,9 @@ if strcmp(cnnConfig.costFun, 'crossEntropy') && strcmp(tempLayer.type, 'softmax'
 elseif strcmp(cnnConfig.costFun, 'mse') && strcmp(tempLayer.name, 'output')
     temp{l}.lateral_factors = getLateralFactors(temp{l}.after,tempLayer, labels);
     temp{l}.after = modifyOutputSpikes(temp{l}.after, labels, cnnConfig.desired_level);
-    temp{l}.gradBefore = diff;
+    temp{l}.gradBefore = diff / cnnConfig.layer{l}.vth;
     [temp{l}.accEffect, temp{l}.effectRatio] = synapticEffect(temp{l}.after, temp{l-1}.after, cnnConfig.use_effect_ratio);
-    grad{l}.W = getGradW(temp{l}.accEffect, temp{l}.gradBefore, temp{l}.lateral_factors);
+    grad{l}.W = getGradW(temp{l}.accEffect, temp{l}.gradBefore, temp{l}.lateral_factors) + getGradWReg(theta{l}.W, cnnConfig);
     grad{l}.b = zeros(size(temp{l}.gradBefore, 1), 1);
 end
 assert(isequal(size(grad{l}.W),size(theta{l}.W)),'size of layer %d .W do not match',l);
@@ -110,9 +110,9 @@ for l = numLayers-1 : -1 : 2
     tempLayer = cnnConfig.layer{l};
     switch tempLayer.type
         case 'spiking'
-            temp{l}.gradBefore = (theta{l + 1}.W .* temp{l+1}.effectRatio)' * temp{l + 1}.gradBefore;
+            temp{l}.gradBefore = (theta{l + 1}.W .* temp{l+1}.effectRatio)' * temp{l + 1}.gradBefore / cnnConfig.layer{l}.vth;
             [temp{l}.accEffect, temp{l}.effectRatio] = synapticEffect(temp{l}.after, temp{l-1}.after, cnnConfig.use_effect_ratio);
-            grad{l}.W = getGradW(temp{l}.accEffect, temp{l}.gradBefore);
+            grad{l}.W = getGradW(temp{l}.accEffect, temp{l}.gradBefore) + getGradWReg(theta{l}.W, cnnConfig);
             grad{l}.b = zeros(size(temp{l}.gradBefore, 1), 1);
         case 'stack2linespiking'
             size_pool = size(temp{l - 1}.after);
@@ -161,7 +161,7 @@ for l = l - 1 : -1 : 2
             grad{l}.W = [];
             grad{l}.b = [];
         case 'convspiking'
-            temp{l}.gradBefore = temp{l+1}.gradBefore;
+            temp{l}.gradBefore = temp{l+1}.gradBefore / cnnConfig.layer{l}.vth;
             tempW = zeros([size(theta{l}.W) numImages]); 
             numInputMap = size(tempW, 3);
             numOutputMap = size(tempW, 4);
@@ -174,9 +174,10 @@ for l = l - 1 : -1 : 2
                     end
                 end
             end
-            grad{l}.W = mean(tempW,5);
-%             if numInputMap >= 3 && numOutputMap >= 3
-%                 fprintf('Wgrad: %f\n', grad{l}.W(1,3,3,1));
+            grad{l}.W = mean(tempW,5) + getGradWRegConv(theta{l}.W, cnnConfig);
+%             if numInputMap == 1 && numOutputMap >= 3
+%                                        %   row, col, input_channel, filter_id 
+%                 fprintf('Wgrad: %f\n', grad{l}.W(5,3,1,5));
 %             end
             grad{l}.b = zeros(numOutputMap,1);
                              

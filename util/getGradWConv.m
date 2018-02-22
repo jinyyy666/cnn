@@ -31,7 +31,7 @@ for i = 1:kernelSize
                 if(cx >= 1 && cy >= 1 && cx <= rowI && cy <= colI)
                     e = accumulateEffect(outputs(x,y,:), inputs(cx,cy,:));
                     val = val + e * deltas(x, y);
-%                     if(i == 1&& j == 3&& nI == 3 && nO == 1)
+%                     if(i == 5&& j == 3&& nI == 1 && nO == 5)
 %                         fprintf('Collect x = %d; y = %d; Acc effect: %f\tdelta = %f\n', x, y, e, deltas(x, y));
 %                     end
                 end

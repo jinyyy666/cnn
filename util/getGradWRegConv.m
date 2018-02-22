@@ -1,0 +1,49 @@
+function gradWReg = getGradWRegConv(W, cnnConfig)
+% getGradWReg:
+%  Compute the gradient for the regularization part of the convolution
+%  layer
+% 
+% Parameters:
+%  W - the 4D tensor of the weight
+%           outputs(kernelSize, kernelSize, numInputMap, numOutputMap)
+%  cnnConfig  - the config of the Spiking CNN
+%  deltas - the delta associated with the output filter
+%           deltas(rowO, colO);
+%  kernelSize - the size of the convolution kernel
+%
+% Returns:
+%  gradWReg - the weight gradient for the regularization part
+%             gradWReg(kernelSize, kernelSize, numInputMap, numOutputMap);
+%
+
+% regularizatin params:
+if ~isfield(cnnConfig, 'lambda')
+    cnnConfig.lambda = 0;
+end
+if ~isfield(cnnConfig, 'beta')
+    cnnConfig.beta = 0;
+end
+if ~isfield(cnnConfig, 'weight_limit')
+    cnnConfig.weight_limit = 8;
+end
+lambda = cnnConfig.lambda;
+beta = cnnConfig.beta;
+weight_limit = cnnConfig.weight_limit;
+
+[kernelSize_x, kernelSize_y, numInputMap, numOutputMap] = size(W);
+kernelSize2 = kernelSize_x * kernelSize_y;
+sqSum = zeros(numOutputMap);
+
+for i = 1:numOutputMap
+    tempKernel = zeros(kernelSize_x, kernelSize_y);
+    for j = 1 : numInputMap
+        tempKernel = tempKernel + W(:,:,j,i).* W(:,:,j,i)/ (weight_limit * weight_limit);
+    end
+    sqSum(i) = sum(sum(tempKernel)) / (numInputMap * kernelSize2);
+end
+
+gradWReg = W / weight_limit;
+for i = 1:numOutputMap
+    gradWReg(:,:,:,i) = lambda * beta * (gradWReg(:,:,:,i)) * exp(beta * (sqSum(i) - 1));
+end
+
