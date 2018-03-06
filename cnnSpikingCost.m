@@ -57,6 +57,10 @@ end
 if cnnConfig.dump
     dumpResults(cnnConfig, pred, temp, theta, numLayers);
 end
+% visualize the activations and print out the variance within the activations and gradient
+if isfield(cnnConfig, 'visualize') && cnnConfig.visualize == true
+    visualize_cnn(temp, grad, cnnConfig);
+end
 
 %%======================================================================
 %% STEP 1b: Calculate Cost
@@ -67,7 +71,7 @@ if pred
     cost = 0;
     grad = 0;
     return;
-end;
+end
 
 switch cnnConfig.costFun
     case 'crossEntropy'
@@ -82,9 +86,9 @@ switch cnnConfig.costFun
         margin = cnnConfig.margin;
         extLabels = undesired_level * ones(numClasses, numImages);
         extLabels(sub2ind(size(extLabels), labels', 1 : numImages)) = desired_level;
-        diff = sum(temp{numLayers}.after, 2) - extLabels;
+        diff = squeeze(sum(temp{numLayers}.after, 2)) - extLabels;
         diff(abs(diff) <= margin) = 0;
-        cost = sum(sum(diff.*diff));
+        cost = sum(sum(diff.*diff))/numImages;
 end
 
 %%======================================================================
@@ -191,4 +195,3 @@ end
 %% Unroll gradient into grad vector for minFunc
 grad = thetaChange(grad,meta,'stack2vec',cnnConfig);
 
-end

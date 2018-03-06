@@ -1,4 +1,4 @@
-function cnnConfigSpiking = configSpiking()
+function cnnConfigSpiking = configSpiking_test()
 
 l = 1;
 cnnConfigSpiking.layer{l}.type = 'input';
@@ -8,8 +8,8 @@ l = l + 1;
 cnnConfigSpiking.layer{l}.type = 'convspiking';
 cnnConfigSpiking.layer{l}.name = 'conv1';
 cnnConfigSpiking.layer{l}.filterDim = [5 5];
-cnnConfigSpiking.layer{l}.numFilters = 15;
-cnnConfigSpiking.layer{l}.conMatrix = ones(1,16);
+cnnConfigSpiking.layer{l}.numFilters = 5;
+cnnConfigSpiking.layer{l}.conMatrix = ones(1,5);
 cnnConfigSpiking.layer{l}.vth = 5;
 l = l + 1;
 
@@ -22,9 +22,9 @@ l = l + 1;
 cnnConfigSpiking.layer{l}.type = 'convspiking';
 cnnConfigSpiking.layer{l}.name = 'conv2';
 cnnConfigSpiking.layer{l}.filterDim = [5 5];
-cnnConfigSpiking.layer{l}.numFilters = 40;
-cnnConfigSpiking.layer{l}.conMatrix = ones(16,40);
-cnnConfigSpiking.layer{l}.vth = 10;
+cnnConfigSpiking.layer{l}.numFilters = 3;
+cnnConfigSpiking.layer{l}.conMatrix = ones(5,3);
+cnnConfigSpiking.layer{l}.vth = 5;
 l = l + 1;
 
 cnnConfigSpiking.layer{l}.type = 'poolspiking';
@@ -39,8 +39,8 @@ l = l + 1;
 
 cnnConfigSpiking.layer{l}.type = 'spiking';
 cnnConfigSpiking.layer{l}.name = 'hidden';
-cnnConfigSpiking.layer{l}.dimension = 300;
-cnnConfigSpiking.layer{l}.vth = 15;
+cnnConfigSpiking.layer{l}.dimension = 100;
+cnnConfigSpiking.layer{l}.vth = 10;
 l = l + 1;
 
 cnnConfigSpiking.layer{l}.type = 'spiking';
@@ -77,11 +77,5 @@ cnnConfigSpiking.beta = 0.4;
 cnnConfigSpiking.weight_limit = 8;
 
 % dump the simulation result
-cnnConfigSpiking.dump = false;
-
-% visualize the activations and variances
-cnnConfigSpiking.visualize = true;
-
-% load the weight from GPU
-cnnConfigSpiking.ini_from_GPU = true;
+cnnConfigSpiking.dump = true;
 end

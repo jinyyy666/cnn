@@ -6,7 +6,7 @@
 %% STEP 0: Initialize Parameters and Load Data
 %  complete the configSpiking.m to config the network structure;
 
-cnnSConfig = configSpiking();
+cnnSConfig = configSpiking_test();
 
 % set up the paths
 addpath('../');
@@ -20,19 +20,34 @@ addpath('../Dataset/MNIST');
 %  calling cnnInitParams() to initialize parameters
 [theta, meta] = cnnSpikingInitParams(cnnSConfig);
 
+%  initialize the weights from the checkPoint of the GPU
+if isfield(cnnSConfig, 'ini_from_GPU') && cnnSConfig.ini_from_GPU == true
+    theta = cnnSpikingInitParamsFromCheck(meta, cnnSConfig, '../checkPoint.txt');
+end
+
 % Load MNIST Data
-%images = loadMNISTImages('train-images-idx3-ubyte');
-images = loadSpikes('../Dataset/MNIST/input_spikes_0_5.dat', cnnSConfig.layer{1}.dimension(1), meta.endTime);
-d = cnnSConfig.layer{1}.dimension;
-images = reshape(images,d(1),d(2),d(3),d(4),[]);
-%labels = loadMNISTLabels('train-labels-idx1-ubyte');
-%labels(labels==0) = 10; % Remap 0 to 10
-labels = 6;
+if cnnSConfig.dump
+    images = loadSpikes('../Dataset/MNIST/input_spikes_0_5.dat', cnnSConfig.layer{1}.dimension(1), meta.endTime);
+    d = cnnSConfig.layer{1}.dimension;
+    images = reshape(images,d(1),d(2),d(3),d(4),[]);
+    labels = 6;
+else
+    d = cnnSConfig.layer{1}.dimension;
+    images = loadSpikingMNISTImages('train-images-idx3-ubyte', d, cnnSConfig.train_samples);
+    labels = loadSpikingMNISTLabels('train-labels-idx1-ubyte', cnnSConfig.train_samples);
+    %images = loadSpikingMNISTImages('t10k-images-idx3-ubyte', d, cnnSConfig.test_samples);
+    %labels = loadSpikingMNISTLabels('t10k-labels-idx1-ubyte', cnnSConfig.test_samples);
+    labels(labels==0) = 10; % Remap 0 to 10
+    fprintf('Loading the training sample... Done!\n');
+end
 %%======================================================================
 %% STEP 3: Learn Parameters
 %  Select 1) SGD or 2) Adam to train the network.
 options.epochs = 1;
-options.minibatch = 1;
+if ~isfield(cnnSConfig, 'minibatch')
+    cnnSConfig.minibatch = 1;
+end
+options.minibatch = cnnSConfig.minibatch;
 switch cnnSConfig.optimizer
     case 'SGD'
         options.alpha = 1e-5;
@@ -50,12 +65,16 @@ end
 %  Test the performance of the trained model using the MNIST test set. Your
 %  accuracy should be above 97% after 3 epochs of training
 
-%testImages = loadMNISTImages('t10k-images-idx3-ubyte');
-%testImages = reshape(testImages,d(1),d(2),d(3),[]);
-%testLabels = loadMNISTLabels('t10k-labels-idx1-ubyte');
-%testLabels(testLabels==0) = 10; % Remap 0 to 10
-testImages = loadSpikes('../Dataset/MNIST/input_spikes_0_5.dat', cnnSConfig.layer{1}.dimension(1), meta.endTime);
-testLabels = 6;
+if cnnSConfig.dump
+    testImages = loadSpikes('../Dataset/MNIST/input_spikes_0_5.dat', cnnSConfig.layer{1}.dimension(1), meta.endTime);
+    testLabels = 6;
+else
+    d = cnnSConfig.layer{1}.dimension;
+    testImages = loadSpikingMNISTImages('t10k-images-idx3-ubyte', d, cnnSConfig.test_samples);
+    labels = loadSpikingMNISTLabels('t10k-labels-idx1-ubyte', cnnSConfig.test_samples);
+    labels(labels==0) = 10; % Remap 0 to 10
+end
+
 
 [cost,grad,preds]=cnnSpikingCost(opttheta,testImages,testLabels,cnnSConfig,meta,true);
 
