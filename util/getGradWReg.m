@@ -30,7 +30,7 @@ lambda = cnnConfig.lambda;
 beta = cnnConfig.beta;
 weight_limit = cnnConfig.weight_limit;
 
-[outputSize, inputSize] = size(W);
+[~, inputSize] = size(W);
 W_norm = W .* W / (weight_limit * weight_limit);
 
 sqSum = sum(W_norm, 2) / inputSize;
@@ -40,7 +40,5 @@ sqSum = sum(W_norm, 2) / inputSize;
 gradWReg = W / weight_limit;
 gradWReg = lambda * beta * gradWReg .* exp(beta * (sqSum *ones(1, inputSize) - 1));
 end
-% for i = 1:outputSize
-%     gradWReg(i, :) = lambda * beta * (gradWReg(i, :)) * exp(beta * (sqSum(i) - 1));
-% end
+
 
