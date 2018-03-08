@@ -8,7 +8,7 @@ l = l + 1;
 cnnConfigSpiking.layer{l}.type = 'convspiking';
 cnnConfigSpiking.layer{l}.name = 'conv1';
 cnnConfigSpiking.layer{l}.filterDim = [5 5];
-cnnConfigSpiking.layer{l}.numFilters = 15;
+cnnConfigSpiking.layer{l}.numFilters = 16;
 cnnConfigSpiking.layer{l}.conMatrix = ones(1,16);
 cnnConfigSpiking.layer{l}.vth = 5;
 l = l + 1;
@@ -30,7 +30,7 @@ l = l + 1;
 cnnConfigSpiking.layer{l}.type = 'poolspiking';
 cnnConfigSpiking.layer{l}.name = 'pool2';
 cnnConfigSpiking.layer{l}.poolDim = [2 2];
-cnnConfigSpiking.layer{l}.vth = 2;
+cnnConfigSpiking.layer{l}.vth = 4;
 l = l + 1;
 
 cnnConfigSpiking.layer{l}.type = 'stack2linespiking';
@@ -40,7 +40,7 @@ l = l + 1;
 cnnConfigSpiking.layer{l}.type = 'spiking';
 cnnConfigSpiking.layer{l}.name = 'hidden';
 cnnConfigSpiking.layer{l}.dimension = 300;
-cnnConfigSpiking.layer{l}.vth = 15;
+cnnConfigSpiking.layer{l}.vth = 10;
 l = l + 1;
 
 cnnConfigSpiking.layer{l}.type = 'spiking';

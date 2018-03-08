@@ -148,7 +148,8 @@ for l = l - 1 : -1 : 2
                     for c = 1 : numChannel
                         for j = 1 : size(temp{l + 1}.gradBefore, 3)
                             if cnnConfig.layer{l + 1}.conMatrix(c,j) ~= 0
-                                temp{l}.gradAfter(:,:,c,i) = temp{l}.gradAfter(:,:,c,i) + conv2(temp{l + 1}.gradBefore(:,:,j,i), theta{l + 1}.W(:,:,c,j), 'full');
+                                %temp{l}.gradAfter(:,:,c,i) = temp{l}.gradAfter(:,:,c,i) + conv2(temp{l + 1}.gradBefore(:,:,j,i), theta{l + 1}.W(:,:,c,j), 'full');
+                                temp{l}.gradAfter(:,:,c,i) = temp{l}.gradAfter(:,:,c,i) + backpropDeltaConv(temp{l+1}.gradBefore(:,:,j,i), temp{l}.after(:,:,:,c,i), temp{l+1}.after(:,:,:,j,i), theta{l+1}.W(:,:,c,j));
                             end
                         end
                     end
@@ -159,7 +160,8 @@ for l = l - 1 : -1 : 2
             temp{l}.gradBefore = zeros(size_conv);
             for i = 1 : numImages
                 for c = 1 : numChannel
-                    temp{l}.gradBefore(:,:,c,i) = kron(temp{l}.gradAfter(:,:,c,i), ones(tempLayer.poolDim)) .* temp{l}.weights(:,:,c,i);
+                    %temp{l}.gradBefore(:,:,c,i) = kron(temp{l}.gradAfter(:,:,c,i), ones(tempLayer.poolDim)) .* temp{l}.weights(:,:,c,i);
+                    temp{l}.gradBefore(:,:,c,i) = backpropDeltaPool(temp{l}.gradAfter(:,:,c,i), temp{l-1}.after(:,:,:,c,i), temp{l}.after(:,:,:,c,i), temp{l}.weights(:,:,c,i), tempLayer.poolDim);
                 end
             end
             grad{l}.W = [];
