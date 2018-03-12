@@ -6,7 +6,7 @@
 %% STEP 0: Initialize Parameters and Load Data
 %  complete the configSpiking.m to config the network structure;
 
-cnnSConfig = configSpiking_test();
+cnnSConfig = configSpiking_test_softmax();
 
 % set up the paths
 addpath('../');
@@ -37,7 +37,7 @@ else
     labels = loadSpikingMNISTLabels('train-labels-idx1-ubyte', cnnSConfig.train_samples);
     %images = loadSpikingMNISTImages('t10k-images-idx3-ubyte', d, cnnSConfig.test_samples);
     %labels = loadSpikingMNISTLabels('t10k-labels-idx1-ubyte', cnnSConfig.test_samples);
-    labels(labels==0) = 10; % Remap 0 to 10
+    labels = labels + 1; % matlab uses 1-based index
     fprintf('Loading the training sample... Done!\n');
 end
 %%======================================================================

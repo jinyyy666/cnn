@@ -55,7 +55,7 @@ for l = 2 : numLayers
 end
 
 if cnnConfig.dump
-    dumpResults(cnnConfig, pred, temp, theta, numLayers);
+    dumpResults(cnnConfig, pred, temp, theta, numLayers, 'weights', 'spikes');
 end
 % visualize the activations and print out the variance within the activations and gradient
 if isfield(cnnConfig, 'visualize') && cnnConfig.visualize == true
@@ -78,7 +78,8 @@ switch cnnConfig.costFun
         numClasses = cnnConfig.layer{numLayers}.dimension;
         extLabels = zeros(numClasses, numImages);
         extLabels(sub2ind(size(extLabels), labels', 1 : numImages)) = 1;
-        cost = - mean(sum(extLabels .* log(temp{numLayers}.after)));
+        softMaxP = getSoftMaxP(temp{numLayers}.after);
+        cost = - mean(sum(extLabels .* log(softMaxP + 1.0e-10)));
     case 'mse'
         numClasses = cnnConfig.layer{numLayers}.dimension;
         desired_level = cnnConfig.desired_level;
@@ -95,10 +96,13 @@ end
 %% STEP 1c: Backpropagation
 %  modify the output spikes of the desired neurons if neccessary
 
-if strcmp(cnnConfig.costFun, 'crossEntropy') && strcmp(tempLayer.type, 'softmax')
-    temp{l}.gradBefore = temp{l}.after - extLabels;
-    grad{l}.W = temp{l}.gradBefore * temp{l - 1}.after' / numImages;
-    grad{l}.b = mean(temp{l}.gradBefore, 2);
+if strcmp(cnnConfig.costFun, 'crossEntropy')
+    temp{l}.lateral_factors = getLateralFactors(temp{l}.after,tempLayer, labels);
+    temp{l}.after = modifyOutputSpikes(temp{l}.after, labels, cnnConfig.desired_level);
+    temp{l}.gradBefore = (softMaxP - extLabels) / cnnConfig.layer{l}.vth;
+    [temp{l}.accEffect, temp{l}.effectRatio] = synapticEffect(temp{l}.after, temp{l-1}.after, cnnConfig.use_effect_ratio);
+    grad{l}.W = getGradW(temp{l}.accEffect, temp{l}.gradBefore, temp{l}.lateral_factors) + getGradWReg(theta{l}.W, cnnConfig);
+    grad{l}.b = zeros(size(temp{l}.gradBefore, 1), 1);
 elseif strcmp(cnnConfig.costFun, 'mse') && strcmp(tempLayer.name, 'output')
     temp{l}.lateral_factors = getLateralFactors(temp{l}.after,tempLayer, labels);
     temp{l}.after = modifyOutputSpikes(temp{l}.after, labels, cnnConfig.desired_level);

@@ -1,4 +1,4 @@
-function dumpResults(cnnSConfig, pred, layers_outputs, theta, numLayers)
+function dumpResults(cnnSConfig, pred, layers_outputs, theta, numLayers, w_path, s_path)
 %
 % dumpResults dump the weights and output spikes of each layer
 %
@@ -12,6 +12,8 @@ function dumpResults(cnnSConfig, pred, layers_outputs, theta, numLayers)
 %  theta{l}.W -  the weight in the l_th layer
 %  theta{l}.b -  the bias in the l_th layer
 %  numLayers  -  the number of the total layers
+%  w_path - the path to dump the weights
+%  s_path  - the path to dump the spikes
 %%======================================================================
 assert(numLayers == size(theta, 1));
 
@@ -22,33 +24,33 @@ for l = 2 : numLayers
         case 'convspiking'
             if pred == false 
                 filename = sprintf('%s_info', tempLayer.name);
-                dumpWeights('weights/', filename, tempTheta.W);
-                spike_path = sprintf('spikes/%s/train', tempLayer.name);
+                dumpWeights(w_path, filename, tempTheta.W);
+                spike_path = sprintf('%s/%s/train', s_path, tempLayer.name);
                 dumpSpikes(spike_path, tempLayer.name, layers_outputs{l}.after);
             else
                 filename = sprintf('%s_info_trained', tempLayer.name);
-                dumpWeights('weights/', filename, tempTheta.W);
-                spike_path = sprintf('spikes/%s/test', tempLayer.name);
+                dumpWeights(w_path, filename, tempTheta.W);
+                spike_path = sprintf('%s/%s/test', s_path, tempLayer.name);
                 dumpSpikes(spike_path, tempLayer.name, layers_outputs{l}.after);
             end
         case 'poolspiking'
             if pred == false 
-                spike_path = sprintf('spikes/%s/train', tempLayer.name);
+                spike_path = sprintf('%s/%s/train', s_path, tempLayer.name);
                 dumpSpikes(spike_path, tempLayer.name, layers_outputs{l}.after);
             else
-                spike_path = sprintf('spikes/%s/test', tempLayer.name);
+                spike_path = sprintf('%s/%s/test', s_path, tempLayer.name);
                 dumpSpikes(spike_path, tempLayer.name, layers_outputs{l}.after);
             end
         case 'spiking'
             if pred == false 
                 filename = sprintf('%s_info', tempLayer.name);
-                dumpTripletWeights('weights/', filename, tempTheta.W, cnnSConfig.layer{l-1}.name, tempLayer.name);
-                spike_path = sprintf('spikes/%s/train', tempLayer.name);
+                dumpTripletWeights(w_path, filename, tempTheta.W, cnnSConfig.layer{l-1}.name, tempLayer.name);
+                spike_path = sprintf('%s/%s/train', s_path, tempLayer.name);
                 dumpSparseSpikes(spike_path, tempLayer.name, layers_outputs{l}.after);
             else
                 filename = sprintf('%s_info_trained', tempLayer.name);
-                dumpTripletWeights('weights/', filename, tempTheta.W, cnnSConfig.layer{l-1}.name, tempLayer.name);
-                spike_path = sprintf('spikes/%s/test', tempLayer.name);
+                dumpTripletWeights(w_path, filename, tempTheta.W, cnnSConfig.layer{l-1}.name, tempLayer.name);
+                spike_path = sprintf('%s/%s/test', s_path, tempLayer.name);
                 dumpSparseSpikes(spike_path, tempLayer.name, layers_outputs{l}.after);
             end
         case 'stack2linespiking'
