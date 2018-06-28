@@ -6,7 +6,7 @@
 %% STEP 0: Initialize Parameters and Load Data
 %  complete the configSpiking.m to config the network structure;
 
-cnnSConfig = configSpiking_test_softmax();
+cnnSConfig = configSpiking_mnist();
 
 % set up the paths
 addpath('../');
@@ -22,7 +22,7 @@ addpath('../Dataset/MNIST');
 
 %  initialize the weights from the checkPoint of the GPU
 if isfield(cnnSConfig, 'ini_from_GPU') && cnnSConfig.ini_from_GPU == true
-    theta = cnnSpikingInitParamsFromCheck(meta, cnnSConfig, '../checkPoint.txt');
+    theta = cnnSpikingInitParamsFromCheck(meta, cnnSConfig, '../checkPoint_mnist_best.txt');
 end
 
 % Load MNIST Data
@@ -33,10 +33,10 @@ if cnnSConfig.dump
     labels = 6;
 else
     d = cnnSConfig.layer{1}.dimension;
-    images = loadSpikingMNISTImages('train-images-idx3-ubyte', d, cnnSConfig.train_samples);
-    labels = loadSpikingMNISTLabels('train-labels-idx1-ubyte', cnnSConfig.train_samples);
-    %images = loadSpikingMNISTImages('t10k-images-idx3-ubyte', d, cnnSConfig.test_samples);
-    %labels = loadSpikingMNISTLabels('t10k-labels-idx1-ubyte', cnnSConfig.test_samples);
+    %images = loadSpikingMNISTImages('train-images-idx3-ubyte', d, cnnSConfig.train_samples);
+    %labels = loadSpikingMNISTLabels('train-labels-idx1-ubyte', cnnSConfig.train_samples);
+    images = loadSpikingMNISTImages('t10k-images-idx3-ubyte', d, cnnSConfig.train_samples);
+    labels = loadSpikingMNISTLabels('t10k-labels-idx1-ubyte', cnnSConfig.train_samples);
     labels = labels + 1; % matlab uses 1-based index
     fprintf('Loading the training sample... Done!\n');
 end
@@ -71,8 +71,8 @@ if cnnSConfig.dump
 else
     d = cnnSConfig.layer{1}.dimension;
     testImages = loadSpikingMNISTImages('t10k-images-idx3-ubyte', d, cnnSConfig.test_samples);
-    labels = loadSpikingMNISTLabels('t10k-labels-idx1-ubyte', cnnSConfig.test_samples);
-    labels(labels==0) = 10; % Remap 0 to 10
+    testLabels = loadSpikingMNISTLabels('t10k-labels-idx1-ubyte', cnnSConfig.test_samples);
+    testLabels = testLabels + 1; % matlab uses 1-based index
 end
 
 

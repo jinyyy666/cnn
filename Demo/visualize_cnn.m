@@ -34,6 +34,8 @@ for l = 1:length(grad)
         subplot(1,length(grad),l);
         histogram(grad{l}.W(:), 'Normalization','probability');
         fprintf('The variance of the W gradient in %d_th layer: %f\n', l, var(grad{l}.W(:)));
+        fprintf('The maximum of the W gradient in %d_th layer: %f\n', l, max(grad{l}.W(:)));
+        fprintf('The minimum of the W gradient in %d_th layer: %f\n', l, min(grad{l}.W(:)));        
     end
 end
 

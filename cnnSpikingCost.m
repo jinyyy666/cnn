@@ -55,7 +55,7 @@ for l = 2 : numLayers
 end
 
 if cnnConfig.dump
-    dumpResults(cnnConfig, pred, temp, theta, numLayers, 'weights', 'spikes');
+    dumpResults(cnnConfig, pred, temp, theta, numLayers, 'weights_softmax', 'spikes_softmax');
 end
 % visualize the activations and print out the variance within the activations and gradient
 if isfield(cnnConfig, 'visualize') && cnnConfig.visualize == true
@@ -89,7 +89,7 @@ switch cnnConfig.costFun
         extLabels(sub2ind(size(extLabels), labels', 1 : numImages)) = desired_level;
         diff = squeeze(sum(temp{numLayers}.after, 2)) - extLabels;
         diff(abs(diff) <= margin) = 0;
-        cost = sum(sum(diff.*diff))/numImages;
+        cost = sum(sum(diff.*diff))/(2*numImages);
 end
 
 %%======================================================================
@@ -101,14 +101,16 @@ if strcmp(cnnConfig.costFun, 'crossEntropy')
     temp{l}.after = modifyOutputSpikes(temp{l}.after, labels, cnnConfig.desired_level);
     temp{l}.gradBefore = (softMaxP - extLabels) / cnnConfig.layer{l}.vth;
     [temp{l}.accEffect, temp{l}.effectRatio] = synapticEffect(temp{l}.after, temp{l-1}.after, cnnConfig.use_effect_ratio);
-    grad{l}.W = getGradW(temp{l}.accEffect, temp{l}.gradBefore, temp{l}.lateral_factors) + getGradWReg(theta{l}.W, cnnConfig);
+    temp{l}.sideEffect = getGradWSideEffect(temp{l}.accEffect, temp{l}.after, theta{l}.W, cnnConfig.layer{l}.vth);
+    grad{l}.W = getGradW(temp{l}.accEffect, temp{l}.sideEffect, temp{l}.gradBefore, temp{l}.lateral_factors) + getGradWReg(theta{l}.W, cnnConfig);
     grad{l}.b = zeros(size(temp{l}.gradBefore, 1), 1);
 elseif strcmp(cnnConfig.costFun, 'mse') && strcmp(tempLayer.name, 'output')
     temp{l}.lateral_factors = getLateralFactors(temp{l}.after,tempLayer, labels);
     temp{l}.after = modifyOutputSpikes(temp{l}.after, labels, cnnConfig.desired_level);
     temp{l}.gradBefore = diff / cnnConfig.layer{l}.vth;
     [temp{l}.accEffect, temp{l}.effectRatio] = synapticEffect(temp{l}.after, temp{l-1}.after, cnnConfig.use_effect_ratio);
-    grad{l}.W = getGradW(temp{l}.accEffect, temp{l}.gradBefore, temp{l}.lateral_factors) + getGradWReg(theta{l}.W, cnnConfig);
+    temp{l}.sideEffect = getGradWSideEffect(temp{l}.accEffect, temp{l}.after, theta{l}.W, cnnConfig.layer{l}.vth);
+    grad{l}.W = getGradW(temp{l}.accEffect, temp{l}.sideEffect, temp{l}.gradBefore, temp{l}.lateral_factors) + getGradWReg(theta{l}.W, cnnConfig);
     grad{l}.b = zeros(size(temp{l}.gradBefore, 1), 1);
 end
 assert(isequal(size(grad{l}.W),size(theta{l}.W)),'size of layer %d .W do not match',l);
@@ -120,7 +122,8 @@ for l = numLayers-1 : -1 : 2
         case 'spiking'
             temp{l}.gradBefore = (theta{l + 1}.W .* temp{l+1}.effectRatio)' * temp{l + 1}.gradBefore / cnnConfig.layer{l}.vth;
             [temp{l}.accEffect, temp{l}.effectRatio] = synapticEffect(temp{l}.after, temp{l-1}.after, cnnConfig.use_effect_ratio);
-            grad{l}.W = getGradW(temp{l}.accEffect, temp{l}.gradBefore) + getGradWReg(theta{l}.W, cnnConfig);
+            temp{l}.sideEffect = getGradWSideEffect(temp{l}.accEffect, temp{l}.after, theta{l}.W, cnnConfig.layer{l}.vth);
+            grad{l}.W = getGradW(temp{l}.accEffect, temp{l}.sideEffect, temp{l}.gradBefore) + getGradWReg(theta{l}.W, cnnConfig);
             grad{l}.b = zeros(size(temp{l}.gradBefore, 1), 1);
         case 'stack2linespiking'
             size_pool = size(temp{l - 1}.after);
@@ -175,11 +178,12 @@ for l = l - 1 : -1 : 2
             tempW = zeros([size(theta{l}.W) numImages]); 
             numInputMap = size(tempW, 3);
             numOutputMap = size(tempW, 4);
+            temp{l}.sideEffect = getGradWConvSideEffect(temp{l}.after, temp{l - 1}.after, theta{l}.W, size(theta{l}.W, 1), cnnConfig.layer{l}.vth, numInputMap, numOutputMap);
             for i = 1 : numImages
                 for nI = 1 : numInputMap
                     for nO = 1 : numOutputMap
                         if tempLayer.conMatrix(nI,nO) ~= 0
-                            tempW(:,:,nI,nO,i) = getGradWConv(temp{l}.after(:,:,:,nO,i), temp{l - 1}.after(:,:,:,nI,i), temp{l}.gradBefore(:,:,nO,i), size(theta{l}.W, 1), nI, nO);
+                            tempW(:,:,nI,nO,i) = getGradWConv(temp{l}.after(:,:,:,nO,i), temp{l - 1}.after(:,:,:,nI,i), temp{l}.sideEffect(:,:,nO,i), temp{l}.gradBefore(:,:,nO,i), size(theta{l}.W, 1), nI, nO);
                         end
                     end
                 end
